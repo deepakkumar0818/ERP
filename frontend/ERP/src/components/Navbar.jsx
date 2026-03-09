@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from 'react-router-dom';
 
 function Navbar() {
     const [openMenu, setOpenMenu] = useState(null);
@@ -44,12 +45,12 @@ function Navbar() {
             >
                 {/* Logo */}
                 <div className="flex-shrink-0">
-                    <span className="font-bold text-xl md:text-2xl text-indigo-600 tracking-tight hover:text-indigo-900">
+                    <Link to="/" className="font-bold text-xl md:text-2xl text-indigo-600 tracking-tight hover:text-indigo-900">
                         ERP.
-                    </span>
+                    </Link>
                 </div>
 
-                {/* Middle Menu - now with glass/button-like blur */}
+                {/* Middle Menu */}
                 <ul className="hidden md:flex items-center gap-6 lg:gap-10 text-sm font-medium text-gray-800">
                     {["Platform", "Resources", "Customers", "Pricing"].map((item) => {
                         const isOpen = openMenu === item.toLowerCase();
@@ -68,7 +69,7 @@ function Navbar() {
                                 onMouseEnter={() => toggleMenu(item.toLowerCase())}
                                 onMouseLeave={() => setOpenMenu(null)}
                             >
-                                <span className="transition-colors group-hover:text-orange-600">
+                                <span className="transition-colors group-hover:text-indigo-600">
                                     {item}
                                 </span>
 
@@ -91,17 +92,17 @@ function Navbar() {
                                                 </div>
                                                 <div>
                                                     <p className="text-indigo-600 font-semibold mb-2">Read</p>
-                                                    <p className="font-medium mb-1">Documentation</p>
-                                                    <p className="text-gray-500 text-xs mb-3">Developer docs & API</p>
+                                                    <p className="font-medium mb-1 line-clamp-1">Documentation</p>
+                                                    <p className="text-gray-500 text-[10px] mb-3 leading-tight">Developer docs & API</p>
                                                     <p className="font-medium">Case Studies</p>
-                                                    <p className="text-gray-500 text-xs">Real-world success stories</p>
+                                                    <p className="text-gray-500 text-[10px] leading-tight">Real-world success stories</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-indigo-600 font-semibold mb-2">Explore</p>
-                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer">Blog</p>
-                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer">Webinars</p>
-                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer">Community</p>
-                                                    <p className="hover:text-indigo-600 cursor-pointer">Changelog</p>
+                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer text-xs">Blog</p>
+                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer text-xs">Webinars</p>
+                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer text-xs">Community</p>
+                                                    <p className="hover:text-indigo-600 cursor-pointer text-xs">Changelog</p>
                                                 </div>
                                             </div>
                                         ) : (
@@ -127,29 +128,31 @@ function Navbar() {
 
                 {/* Right Buttons */}
                 <div className="flex items-center gap-4 flex-shrink-0">
-                    <button
+                    <Link
+                        to="/dashboard"
                         className={`
-              text-sm font-medium px-5 py-2 rounded-full transition-all duration-300 hover:text-orange-400
+              text-sm font-medium px-5 py-2 rounded-full transition-all duration-300
               ${scrolled
-                                ? "bg-white/50 backdrop-blur-md border border-white/40 hover:bg-white/90 text-gray-800 cursor-pointer"
-                                : "bg-white/30 hover:bg-white/50 text-gray-800 cursor-pointer shadow-sm"
+                                ? "bg-white/50 backdrop-blur-md border border-white/40 hover:bg-white/90 text-gray-800"
+                                : "bg-white/30 hover:bg-white/50 text-gray-800 shadow-sm"
                             }
             `}
                     >
                         Login
-                    </button>
+                    </Link>
 
-                    <button
+                    <Link
+                        to="/dashboard"
                         className={`
-              text-sm font-semibold px-6 py-2.5 rounded-full transition-all duration-300 shadow-md cursor-pointer
+              text-sm font-semibold px-6 py-2.5 rounded-full transition-all duration-300 shadow-md
               ${scrolled
-                                ? "bg-indigo-500/90 text-white hover:bg-indigo-600 shadow-indigo-500/30 backdrop-blur-sm"
-                                : "bg-indigo-500 text-white hover:bg-indigo-600 shadow-lg cursor-pointer"
+                                ? "bg-indigo-600/90 text-white hover:bg-indigo-700 shadow-indigo-500/30 backdrop-blur-sm"
+                                : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg"
                             }
             `}
                     >
-                        Sign up
-                    </button>
+                        Get Started
+                    </Link>
                 </div>
             </div>
         </nav>
