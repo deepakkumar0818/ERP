@@ -7,8 +7,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Routes import (Hum abhi banayenge)
 const authRoutes = require('./src/routes/auth');
+
+// Routes usage
 app.use('/api/auth', authRoutes);
+app.use('/api/sales', salesRoutes);
 
 app.get('/', (req, res) => {
   res.send('Factory ERP Backend is Running!');
