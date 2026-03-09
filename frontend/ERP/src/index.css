@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
+
 :root {
   --sidebar-width: 280px;
 }
@@ -29,5 +32,5 @@ html {
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  @apply text-slate-900 antialiased;
+  @apply bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased transition-colors duration-500;
 }
