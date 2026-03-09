@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// For Lead/Enquiry
+model Lead {
+  id        String   @id @default(uuid())
+  clientName String
+  requirement String
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+  quotations Quotation[]
+}
+
+// For Quotation
+model Quotation {
+  id           String       @id @default(uuid())
+  leadId       String
+  basePrice    Float
+  negotiatedPrice Float?    // Step 3: For Negotiation
+  status       String       @default("PENDING_APPROVAL")
+  lead         Lead         @relation(fields: [leadId], references: [id])
+  salesOrders  SalesOrder[]
+}
+
+// For Sales Order
+model SalesOrder {
+  id          String     @id @default(uuid())
+  quotationId String
+  status      String     @default("CONFIRMED")
+  createdAt   DateTime   @default(now())
+  quotation   Quotation  @relation(fields: [quotationId], references: [id])
+  jobOrders   JobOrder[] // Link to Production
+  shippings   Shipping[]
+}
+
+// For BOM (Bill of Materials)
+model BOM {
+  id                String    @id @default(uuid())
+  finishedProductId String
+  materialId        String
+  quantityRequired  Float
+  
+  product           Inventory @relation("Product", fields: [finishedProductId], references: [id])
+  material          Inventory @relation("Material", fields: [materialId], references: [id])
+}
+
+// Job Order
+model JobOrder {
+  id             String         @id @default(uuid())
+  salesOrderId   String
+  productId      String
+  quantity       Float
+  status         String         @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  createdAt      DateTime       @default(now())
+  
+  salesOrder     SalesOrder     @relation(fields: [salesOrderId], references: [id])
+  qualityChecks  QualityCheck[]
+  packings       Packing[]
+}
+
+// Quality Check
+model QualityCheck {
+  id         String   @id @default(uuid())
+  jobOrderId String
+  status     String
+  remarks    String?
+
+  jobOrder JobOrder @relation(fields: [jobOrderId], references: [id])
+}
+
+// Product / Inventory
+model Inventory {
+  id        String   @id @default(uuid())
+  name      String
+  sku       String   @unique
+  quantity  Float    @default(0)
+  unit      String
+  type      String   @default("RAW") // RAW_MATERIAL or FINISHED_GOOD
+  bomItems  BOM[]    @relation("Material") // As an ingredient
+  asProduct BOM[]    @relation("Product")  // As the final item
+}
+
+// Packing
+model Packing {
+  id        String   @id @default(uuid())
+  jobOrderId String
+  status    String
+
+  jobOrder JobOrder @relation(fields: [jobOrderId], references: [id])
+}
+
+
+// Shipping
+model Shipping {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  carrier      String
+  trackingNo   String?
+  status       String     @default("IN_TRANSIT")
+  order        SalesOrder @relation(fields: [salesOrderId], references: [id])
+  deliveries   Delivery[]
+}
+
+// Delivery
+model Delivery {
+  id          String    @id @default(uuid())
+  shippingId  String
+  status      String    @default("DELIVERED")
+  deliveredAt DateTime?
+  shipping    Shipping  @relation(fields: [shippingId], references: [id])
+}
