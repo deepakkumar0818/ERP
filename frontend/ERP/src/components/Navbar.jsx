@@ -1,0 +1,159 @@
+import React, { useState, useEffect } from "react";
+
+function Navbar() {
+    const [openMenu, setOpenMenu] = useState(null);
+    const [scrolled, setScrolled] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 40);
+        };
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    const toggleMenu = (menu) => {
+        setOpenMenu(openMenu === menu ? null : menu);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (!e.target.closest("nav")) setOpenMenu(null);
+        };
+        document.addEventListener("click", handleClickOutside);
+        return () => document.removeEventListener("click", handleClickOutside);
+    }, []);
+
+    return (
+        <nav
+            className={`
+        fixed top-0 left-0 right-0 z-50 flex justify-center 
+        transition-all duration-500 ease-in-out
+        ${scrolled ? "pt-3 pb-3" : "pt-6 pb-6"}
+      `}
+        >
+            <div
+                className={`
+          flex items-center justify-between rounded-full 
+          border border-white/20 transition-all duration-500 ease-in-out
+          ${scrolled
+                        ? "w-[90%] md:w-[78%] lg:w-[68%] xl:w-[60%] backdrop-blur-xl bg-white/65 shadow-2xl shadow-black/15 px-6 py-3.5"
+                        : "w-[94%] md:w-[88%] backdrop-blur-md bg-white/85 shadow-xl px-8 py-4.5"
+                    }
+        `}
+            >
+                {/* Logo */}
+                <div className="flex-shrink-0">
+                    <span className="font-bold text-xl md:text-2xl text-indigo-600 tracking-tight hover:text-indigo-900">
+                        ERP.
+                    </span>
+                </div>
+
+                {/* Middle Menu - now with glass/button-like blur */}
+                <ul className="hidden md:flex items-center gap-6 lg:gap-10 text-sm font-medium text-gray-800">
+                    {["Platform", "Resources", "Customers", "Pricing"].map((item) => {
+                        const isOpen = openMenu === item.toLowerCase();
+
+                        return (
+                            <li
+                                key={item}
+                                className={`
+                  relative group px-4 py-2 rounded-full cursor-pointer transition-all duration-300
+                  ${scrolled
+                                        ? "backdrop-blur-md bg-white/40 hover:bg-white/60 border border-white/30"
+                                        : "hover:bg-white/30"
+                                    }
+                  ${isOpen ? "bg-white/55 shadow-sm" : ""}
+                `}
+                                onMouseEnter={() => toggleMenu(item.toLowerCase())}
+                                onMouseLeave={() => setOpenMenu(null)}
+                            >
+                                <span className="transition-colors group-hover:text-orange-600">
+                                    {item}
+                                </span>
+
+                                {isOpen && (
+                                    <div
+                                        className={`
+                      absolute top-full left-1/2 -translate-x-1/2 mt-3 
+                      bg-white/90 backdrop-blur-lg shadow-2xl rounded-xl border border-white/30
+                      min-w-[280px] lg:min-w-[340px] p-6
+                      opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto
+                      transition-all duration-300 ease-out translate-y-1 group-hover:translate-y-0
+                    `}
+                                    >
+                                        {item === "Resources" ? (
+                                            <div className="grid grid-cols-3 gap-6 text-sm">
+                                                <div>
+                                                    <p className="text-indigo-600 font-semibold mb-2">Featured</p>
+                                                    <div className="bg-gray-100/70 backdrop-blur-sm h-28 rounded-lg mb-2 border border-white/40"></div>
+                                                    <p className="font-medium">AI Agents Guide 2025</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-indigo-600 font-semibold mb-2">Read</p>
+                                                    <p className="font-medium mb-1">Documentation</p>
+                                                    <p className="text-gray-500 text-xs mb-3">Developer docs & API</p>
+                                                    <p className="font-medium">Case Studies</p>
+                                                    <p className="text-gray-500 text-xs">Real-world success stories</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-indigo-600 font-semibold mb-2">Explore</p>
+                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer">Blog</p>
+                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer">Webinars</p>
+                                                    <p className="mb-1 hover:text-indigo-600 cursor-pointer">Community</p>
+                                                    <p className="hover:text-indigo-600 cursor-pointer">Changelog</p>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4 text-sm">
+                                                <p className="font-medium hover:text-indigo-600 cursor-pointer">
+                                                    {item === "Platform" ? "Overview & Features" : item === "Customers" ? "Case Studies" : "Plans & Compare"}
+                                                </p>
+                                                <p className="text-gray-600 text-xs leading-relaxed">
+                                                    {item === "Platform"
+                                                        ? "Explore powerful tools built for manufacturing teams"
+                                                        : item === "Customers"
+                                                            ? "See how leading companies transformed operations"
+                                                            : "Choose the perfect plan for your scale"}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
+
+                {/* Right Buttons */}
+                <div className="flex items-center gap-4 flex-shrink-0">
+                    <button
+                        className={`
+              text-sm font-medium px-5 py-2 rounded-full transition-all duration-300 hover:text-orange-400
+              ${scrolled
+                                ? "bg-white/50 backdrop-blur-md border border-white/40 hover:bg-white/90 text-gray-800 cursor-pointer"
+                                : "bg-white/30 hover:bg-white/50 text-gray-800 cursor-pointer shadow-sm"
+                            }
+            `}
+                    >
+                        Login
+                    </button>
+
+                    <button
+                        className={`
+              text-sm font-semibold px-6 py-2.5 rounded-full transition-all duration-300 shadow-md cursor-pointer
+              ${scrolled
+                                ? "bg-indigo-500/90 text-white hover:bg-indigo-600 shadow-indigo-500/30 backdrop-blur-sm"
+                                : "bg-indigo-500 text-white hover:bg-indigo-600 shadow-lg cursor-pointer"
+                            }
+            `}
+                    >
+                        Sign up
+                    </button>
+                </div>
+            </div>
+        </nav>
+    );
+}
+
+export default Navbar;
