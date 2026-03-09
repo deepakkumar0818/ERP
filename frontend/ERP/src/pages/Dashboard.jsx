@@ -107,6 +107,61 @@ export default function Dashboard() {
                         View All Activity
                     </button>
                 </div>
+                {/* Sales Leads Section */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-4">Sales Leads</h3>
+                    <table className="w-full text-sm text-left text-slate-600 dark:text-slate-300">
+                        <thead className="bg-slate-100 dark:bg-slate-800">
+                            <tr>
+                                <th className="px-4 py-2">Lead ID</th>
+                                <th className="px-4 py-2">Customer</th>
+                                <th className="px-4 py-2">Value</th>
+                                <th className="px-4 py-2">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-4 py-2">L-001</td>
+                                <td className="px-4 py-2">Acme Corp</td>
+                                <td className="px-4 py-2">₹5,00,000</td>
+                                <td className="px-4 py-2 text-emerald-600">Qualified</td>
+                            </tr>
+                            <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <td className="px-4 py-2">L-002</td>
+                                <td className="px-4 py-2">Beta Ltd</td>
+                                <td className="px-4 py-2">₹3,20,000</td>
+                                <td className="px-4 py-2 text-amber-600">Pending</td>
+                            </tr>
+                            <tr>
+                                <td className="px-4 py-2">L-003</td>
+                                <td className="px-4 py-2">Gamma Inc</td>
+                                <td className="px-4 py-2">₹7,80,000</td>
+                                <td className="px-4 py-2 text-rose-600">Lost</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {/* Quotations Section */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-4">Quotations</h3>
+                    <ul className="space-y-3">
+                        <li className="flex justify-between items-center">
+                            <span className="font-medium">Q-101</span>
+                            <span className="text-slate-500">₹2,50,000</span>
+                            <span className="text-emerald-600">Approved</span>
+                        </li>
+                        <li className="flex justify-between items-center">
+                            <span className="font-medium">Q-102</span>
+                            <span className="text-slate-500">₹1,80,000</span>
+                            <span className="text-amber-600">Pending</span>
+                        </li>
+                        <li className="flex justify-between items-center">
+                            <span className="font-medium">Q-103</span>
+                            <span className="text-slate-500">₹3,40,000</span>
+                            <span className="text-rose-600">Rejected</span>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
     );

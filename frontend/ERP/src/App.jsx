@@ -13,11 +13,14 @@ import Invoices from './pages/Invoices'
 import Machines from './pages/Machines'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import Login, { Register } from './forms/login'
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       {/* Protected / Authenticated layout */}
       <Route element={<Layout />}>

@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
-
 
 function Navbar() {
     const [openMenu, setOpenMenu] = useState(null);
@@ -133,7 +132,7 @@ function Navbar() {
                     <ThemeToggle />
 
                     <Link
-                        to="/dashboard"
+                        to="/login"
                         className={`
                text-sm font-medium px-5 py-2 rounded-full transition-all duration-300
                ${scrolled
@@ -146,7 +145,7 @@ function Navbar() {
                     </Link>
 
                     <Link
-                        to="/dashboard"
+                        to="/register"
                         className={`
                text-sm font-semibold px-6 py-2.5 rounded-full transition-all duration-300 shadow-md
                ${scrolled
