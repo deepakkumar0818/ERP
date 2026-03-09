@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
@@ -9,23 +9,23 @@ datasource db {
 
 // For Lead/Enquiry
 model Lead {
-  id        String   @id @default(uuid())
-  clientName String
+  id          String      @id @default(uuid())
+  clientName  String
   requirement String
-  status    String   @default("NEW")
-  createdAt DateTime @default(now())
-  quotations Quotation[]
+  status      String      @default("NEW")
+  createdAt   DateTime    @default(now())
+  quotations  Quotation[]
 }
 
 // For Quotation
 model Quotation {
-  id           String       @id @default(uuid())
-  leadId       String
-  basePrice    Float
-  negotiatedPrice Float?    // Step 3: For Negotiation
-  status       String       @default("PENDING_APPROVAL")
-  lead         Lead         @relation(fields: [leadId], references: [id])
-  salesOrders  SalesOrder[]
+  id              String       @id @default(uuid())
+  leadId          String
+  basePrice       Float
+  negotiatedPrice Float? // Step 3: For Negotiation
+  status          String       @default("PENDING_APPROVAL")
+  lead            Lead         @relation(fields: [leadId], references: [id])
+  salesOrders     SalesOrder[]
 }
 
 // For Sales Order
@@ -41,32 +41,32 @@ model SalesOrder {
 
 // For BOM (Bill of Materials)
 model BOM {
-  id                String    @id @default(uuid())
+  id                String @id @default(uuid())
   finishedProductId String
   materialId        String
   quantityRequired  Float
-  
-  product           Inventory @relation("Product", fields: [finishedProductId], references: [id])
-  material          Inventory @relation("Material", fields: [materialId], references: [id])
+
+  product  Inventory @relation("Product", fields: [finishedProductId], references: [id])
+  material Inventory @relation("Material", fields: [materialId], references: [id])
 }
 
 // Job Order
 model JobOrder {
-  id             String         @id @default(uuid())
-  salesOrderId   String
-  productId      String
-  quantity       Float
-  status         String         @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
-  createdAt      DateTime       @default(now())
-  
-  salesOrder     SalesOrder     @relation(fields: [salesOrderId], references: [id])
-  qualityChecks  QualityCheck[]
-  packings       Packing[]
+  id           String   @id @default(uuid())
+  salesOrderId String
+  productId    String
+  quantity     Float
+  status       String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  createdAt    DateTime @default(now())
+
+  salesOrder    SalesOrder     @relation(fields: [salesOrderId], references: [id])
+  qualityChecks QualityCheck[]
+  packings      Packing[]
 }
 
 // Quality Check
 model QualityCheck {
-  id         String   @id @default(uuid())
+  id         String  @id @default(uuid())
   jobOrderId String
   status     String
   remarks    String?
@@ -76,25 +76,24 @@ model QualityCheck {
 
 // Product / Inventory
 model Inventory {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   name      String
-  sku       String   @unique
-  quantity  Float    @default(0)
+  sku       String @unique
+  quantity  Float  @default(0)
   unit      String
-  type      String   @default("RAW") // RAW_MATERIAL or FINISHED_GOOD
-  bomItems  BOM[]    @relation("Material") // As an ingredient
-  asProduct BOM[]    @relation("Product")  // As the final item
+  type      String @default("RAW") // RAW_MATERIAL or FINISHED_GOOD
+  bomItems  BOM[]  @relation("Material") // As an ingredient
+  asProduct BOM[]  @relation("Product") // As the final item
 }
 
 // Packing
 model Packing {
-  id        String   @id @default(uuid())
+  id         String @id @default(uuid())
   jobOrderId String
-  status    String
+  status     String
 
   jobOrder JobOrder @relation(fields: [jobOrderId], references: [id])
 }
-
 
 // Shipping
 model Shipping {
@@ -114,4 +113,14 @@ model Delivery {
   status      String    @default("DELIVERED")
   deliveredAt DateTime?
   shipping    Shipping  @relation(fields: [shippingId], references: [id])
+}
+
+// 
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("STAFF") // ADMIN, SALES, STORE_MANAGER, QC_MANAGER
+  createdAt DateTime @default(now())
 }
