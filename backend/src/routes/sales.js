@@ -12,7 +12,7 @@ console.log('Sales routes loaded');
 
 // Leads
 router.post('/leads', createLead);
-router.get('/leads', getLeads);
+router.get('/getleads', getLeads);
 
 // Quotations
 router.post('/quotations', createQuotation);
