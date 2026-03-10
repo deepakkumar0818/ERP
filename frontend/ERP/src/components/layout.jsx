@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
     LayoutDashboard,
     ShoppingCart,
@@ -13,15 +13,35 @@ import {
     Settings as SettingsIcon,
     LogOut,
     Menu,
-    ChevronDown,
+    ChevronLeft,
     ShoppingBag
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ThemeToggle from './ThemeToggle'
 
 export default function Layout() {
     const [sidebarOpen, setSidebarOpen] = useState(true)
+    const [user, setUser] = useState(null)
     const location = useLocation()
+    const navigate = useNavigate()
+
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('erp_user')
+            if (stored) setUser(JSON.parse(stored))
+        } catch { /* ignore */ }
+    }, [])
+
+    const getInitials = (u) => {
+        const name = u?.name || u?.username || ''
+        return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?'
+    }
+
+    const handleSignOut = () => {
+        localStorage.removeItem('erp_token')
+        localStorage.removeItem('erp_user')
+        navigate('/')
+    }
 
     const menuGroups = [
         {
@@ -79,12 +99,21 @@ export default function Layout() {
                 fixed inset-y-0 left-0 z-50 w-72 bg-[#0f172a] dark:bg-slate-900 text-slate-300 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 border-r border-slate-800/50
                 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
-                <div className="h-20 flex items-center px-8 border-b border-slate-800/50 bg-[#0f172a] dark:bg-slate-900">
+                <div className="h-20 flex items-center justify-between px-6 border-b border-slate-800/50 bg-[#0f172a] dark:bg-slate-900">
                     <Link to="/dashboard" className="flex items-center gap-3 group">
-                        <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
+                        <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform shrink-0">
                             <Factory className="h-6 w-6 text-white" />
                         </div>
                         <span className="text-xl font-bold text-white tracking-tight">ERP</span>
+                    </Link>
+
+                    <Link
+                        to="/"
+                        className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-700/60 px-2.5 py-1.5 rounded-lg transition-all group"
+                        title="Back to Home"
+                    >
+                        <ChevronLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" />
+                        Home
                     </Link>
                 </div>
 
@@ -115,7 +144,10 @@ export default function Layout() {
                 </nav>
 
                 <div className="p-4 border-t border-slate-800/50 bg-[#0f172a]/50">
-                    <button className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/5 rounded-xl transition-all">
+                    <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/5 rounded-xl transition-all"
+                    >
                         <LogOut className="h-5 w-5" />
                         <span>Sign Out</span>
                     </button>
@@ -138,12 +170,18 @@ export default function Layout() {
                     <div className="flex items-center gap-6">
                         <ThemeToggle />
 
-                        <div className="flex items-center gap-4">
-                            <div className="hidden md:flex flex-col items-end mr-2">
-                                <span className="text-sm font-bold text-slate-900 dark:text-white">John Doe</span>
-                                <span className="text-xs text-slate-500 dark:text-slate-400">Plant Manager</span>
+                        <div className="flex items-center gap-3">
+                            <div className="hidden md:flex flex-col items-end">
+                                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                    {user?.name || user?.username || 'User'}
+                                </span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 capitalize">
+                                    {user?.role || 'Member'}
+                                </span>
                             </div>
-                            <div className="h-10 w-10 rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 border-2 border-white dark:border-slate-800 shadow-sm" />
+                            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 border-2 border-white dark:border-slate-800 shadow-sm flex items-center justify-center text-white text-sm font-bold select-none">
+                                {getInitials(user)}
+                            </div>
                         </div>
                     </div>
                 </header>

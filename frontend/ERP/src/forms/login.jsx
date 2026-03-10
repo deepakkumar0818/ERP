@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import loginVideo from "../assets/loginvideo.mp4";
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000";
@@ -52,13 +53,28 @@ function Login() {
     };
 
     return (
-        <div className="min-h-screen flex">
+        <div className="min-h-screen flex bg-linear-to-br from-slate-50 via-indigo-50 to-slate-100">
             <div className="hidden lg:flex w-1/2 items-center justify-center overflow-hidden">
-                <video className="w-full h-full object-cover" src="/assets/loginvideo.mp4" autoPlay muted loop playsInline/>
+                <video
+                    className="w-full h-full object-cover"
+                    src={loginVideo}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                />
             </div>
-            <div className="flex w-full lg:w-1/2 items-center justify-center bg-gray-100 px-4">
-                <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg">
-                    <h2 className="text-3xl font-bold text-center mb-6">Welcome Back</h2>
+            <div className="flex w-full lg:w-1/2 items-center justify-center px-4 py-10">
+                <div className="w-full max-w-md bg-white/90 backdrop-blur-xl p-8 rounded-2xl shadow-2xl border border-slate-100">
+                    <div className="mb-6 text-center">
+                        <p className="text-xs font-semibold tracking-[0.2em] text-indigo-500 uppercase mb-2">
+                            Secure access
+                        </p>
+                        <h2 className="text-3xl font-bold mb-1 text-slate-900">Welcome back</h2>
+                        <p className="text-sm text-slate-500">
+                            Sign in to continue to your manufacturing workspace.
+                        </p>
+                    </div>
                     <form className="space-y-5" onSubmit={handleLogin}>
                         <input
                             type="email"
@@ -69,30 +85,41 @@ function Login() {
                             required
                         />
 
-                        <input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                            required
-                        />
+                        <div className="space-y-2">
+                            <input
+                                type="password"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                required
+                            />
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-400">Forgot your password?</span>
+                                <Link
+                                    to="/forgot-password"
+                                    className="font-medium text-indigo-600 hover:text-indigo-700"
+                                >
+                                    Reset it
+                                </Link>
+                            </div>
+                        </div>
 
                         {error && <p className="text-sm text-red-600">{error}</p>}
 
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-md shadow-indigo-200 transition-transform duration-150 active:scale-[0.98]"
                         >
                             {isLoading ? "Signing in..." : "Login"}
                         </button>
                     </form>
 
-                    <p className="text-center mt-6 text-sm">
+                    <p className="text-center mt-6 text-sm text-slate-600">
                         Don&apos;t have an account?{" "}
-                        <Link to="/register" className="text-indigo-600 font-medium">
-                            Register
+                        <Link to="/register" className="text-indigo-600 font-medium hover:text-indigo-700">
+                            Create one
                         </Link>
                     </p>
                 </div>
@@ -131,17 +158,29 @@ function Register() {
     };
 
     return (
-        <div className="min-h-screen flex">
+        <div className="min-h-screen flex bg-linear-to-br from-slate-50 via-indigo-50 to-slate-100">
             <div className="hidden lg:flex w-1/2 items-center justify-center overflow-hidden">
-                <video className="w-full h-full object-cover" autoPlay muted loop playsInline>
-                    <source src="./assets/login" type="video/mp4" />
-                    Your browser does not support the video tag.
-                </video>
+                <video
+                    className="w-full h-full object-cover"
+                    src={loginVideo}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                />
             </div>
 
-            <div className="flex w-full lg:w-1/2 items-center justify-center bg-gray-100 px-4">
-                <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg">
-                    <h2 className="text-3xl font-bold text-center mb-6">Register</h2>
+            <div className="flex w-full lg:w-1/2 items-center justify-center px-4 py-10">
+                <div className="w-full max-w-md bg-white/90 backdrop-blur-xl p-8 rounded-2xl shadow-2xl border border-slate-100">
+                    <div className="mb-6 text-center">
+                        <p className="text-xs font-semibold tracking-[0.2em] text-indigo-500 uppercase mb-2">
+                            Create account
+                        </p>
+                        <h2 className="text-3xl font-bold mb-1 text-slate-900">Join the workspace</h2>
+                        <p className="text-sm text-slate-500">
+                            Get a secure account for your team&apos;s operations.
+                        </p>
+                    </div>
 
                     <form className="space-y-5" onSubmit={handleRegister}>
                         <input
@@ -177,15 +216,15 @@ function Register() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-md shadow-indigo-200 transition-transform duration-150 active:scale-[0.98]"
                         >
                             {isLoading ? "Creating account..." : "Create Account"}
                         </button>
                     </form>
 
-                    <p className="text-center mt-6 text-sm">
+                    <p className="text-center mt-6 text-sm text-slate-600">
                         Already have an account?{" "}
-                        <Link to="/login" className="text-indigo-600 font-medium">
+                        <Link to="/login" className="text-indigo-600 font-medium hover:text-indigo-700">
                             Login
                         </Link>
                     </p>

@@ -14,13 +14,23 @@ import Machines from './pages/Machines'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import Login, { Register } from './forms/login'
+import ForgotPassword from './forms/ForgotPassword'
+import Platform from './pages/Platform'
+import Resources from './pages/Resources'
+import Customers from './pages/Customers'
+import Pricing from './pages/pricing'
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/platform" element={<Platform />} />
+      <Route path="/resources" element={<Resources />} />
+      <Route path="/customers" element={<Customers />} />
+      <Route path="/pricing" element={<Pricing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Protected / Authenticated layout */}
       <Route element={<Layout />}>
