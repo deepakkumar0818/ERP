@@ -85,7 +85,29 @@ const login = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    // Check if user exists (don't reveal whether it does or not)
+    await prisma.user.findUnique({ where: { email } });
+
+    // Always return success to prevent user enumeration
+    return res.json({
+      message: "If an account exists with this email, we've sent a reset link.",
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   signup,
   login,
+  forgotPassword,
 };
