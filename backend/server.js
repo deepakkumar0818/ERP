@@ -9,10 +9,15 @@ app.use(express.json());
 
 // Routes import (Hum abhi banayenge)
 const authRoutes = require('./src/routes/auth');
+const salesRoutes = require('./src/routes/sales');
+const productionRoutes = require('./src/routes/production');
+const inventoryRoutes = require('./src/routes/inventory');
 
 // Routes usage
 app.use('/api/auth', authRoutes);
 app.use('/api/sales', salesRoutes);
+app.use('/api/production', productionRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 app.get('/', (req, res) => {
   res.send('Factory ERP Backend is Running!');

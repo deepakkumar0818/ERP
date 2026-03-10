@@ -1,10 +1,10 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // For Lead/Enquiry
@@ -124,4 +124,3 @@ model User {
   role      String   @default("STAFF") // ADMIN, SALES, STORE_MANAGER, QC_MANAGER
   createdAt DateTime @default(now())
 }
-
