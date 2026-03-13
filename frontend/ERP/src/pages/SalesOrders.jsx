@@ -1,488 +1,535 @@
-import React, { useEffect, useState } from 'react';
-import { ShoppingCart, Plus, FileText, Upload, Loader2 } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { ShoppingCart, Plus, Upload, Loader2, CheckCircle2, X, Copy, Check } from 'lucide-react';
+import { salesApi, productionApi } from '../api/api';
 
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || 'http://localhost:5000';
+const SO_STORE_KEY = 'erp_sales_orders';
 
-async function requestSales(endpoint, options = {}) {
-    const url = `${API_BASE_URL}/api/sales/${endpoint}`;
-    const response = await fetch(url, options);
+function loadSavedSOs() {
+    try { return JSON.parse(localStorage.getItem(SO_STORE_KEY) || '[]'); } catch { return []; }
+}
+function saveSO(entry) {
+    const existing = loadSavedSOs();
+    if (existing.some(s => s.id === entry.id)) return;
+    localStorage.setItem(SO_STORE_KEY, JSON.stringify([entry, ...existing]));
+}
 
-    let data = null;
-    try {
-        data = await response.json();
-    } catch {
-        data = null;
-    }
-
-    if (!response.ok) {
-        throw new Error(data?.message || 'Sales request failed');
-    }
-
-    return data;
+function CopyBtn({ text }) {
+    const [copied, setCopied] = useState(false);
+    const handle = () => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+        });
+    };
+    return (
+        <button onClick={handle} title="Copy ID"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+            <span className="text-[10px] font-mono">{text.slice(-8).toUpperCase()}</span>
+        </button>
+    );
 }
 
 export default function SalesOrders() {
-    const [leads, setLeads] = useState([]);
-    const [selectedLeadId, setSelectedLeadId] = useState('');
-    const [quotations, setQuotations] = useState([]);
-    const [leadForm, setLeadForm] = useState({ clientName: '', requirement: '' });
-    const [quotationForm, setQuotationForm] = useState({ basePrice: '' });
-    const [excelFile, setExcelFile] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [message, setMessage] = useState('');
-    const [error, setError] = useState('');
+    // ── data ──────────────────────────────────────────────────────────────────
+    const [leads, setLeads]               = useState([]);
+    const [selectedLead, setSelectedLead] = useState(null);
+    const [quotations, setQuotations]     = useState([]);
+    const [savedSOs, setSavedSOs]         = useState(loadSavedSOs);
 
-    const fetchLeads = async () => {
+    // ── form state (flat, never nested inside render) ─────────────────────────
+    const [leadClientName, setLeadClientName]     = useState('');
+    const [leadRequirement, setLeadRequirement]   = useState('');
+    const [quotationBasePrice, setQuotationBasePrice] = useState('');
+    const [negQuotationId, setNegQuotationId]     = useState('');
+    const [negPrice, setNegPrice]                 = useState('');
+    const [negStatus, setNegStatus]               = useState('APPROVED');
+    const [excelFile, setExcelFile]               = useState(null);
+
+    // ── UI state ──────────────────────────────────────────────────────────────
+    const [activeTab, setActiveTab]       = useState('leads');
+    const [soFilter, setSoFilter]         = useState('ALL');
+    const [isLoading, setIsLoading]       = useState(false);
+    const [leadsLoading, setLeadsLoading] = useState(true);
+    const [message, setMessage]           = useState('');
+    const [error, setError]               = useState('');
+    const [createdSO, setCreatedSO]       = useState(null); // newly created SO banner
+
+    const showMsg = (m) => { setMessage(m); setError(''); };
+    const showErr = (e) => { setError(e);   setMessage(''); };
+
+    // ── fetch leads ───────────────────────────────────────────────────────────
+    const fetchLeads = useCallback(async () => {
+        setLeadsLoading(true);
         try {
-            const data = await requestSales('leads');
+            const data = await salesApi.getLeads();
             setLeads(data.leads || []);
-        } catch (err) {
-            console.error(err);
-            setError(err.message);
-        }
-    };
-
-    useEffect(() => {
-        fetchLeads();
+        } catch (err) { showErr(err.message); }
+        finally { setLeadsLoading(false); }
     }, []);
 
-    const handleCreateLead = async (event) => {
-        event.preventDefault();
-        setError('');
-        setMessage('');
-        setIsLoading(true);
+    useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-        try {
-            await requestSales('leads', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(leadForm),
-            });
-            setLeadForm({ clientName: '', requirement: '' });
-            setMessage('Lead created successfully');
-            await fetchLeads();
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleSelectLead = async (leadId) => {
-        setSelectedLeadId(leadId);
+    // ── lead selection ────────────────────────────────────────────────────────
+    const handleSelectLead = async (lead) => {
+        if (selectedLead?.id === lead.id) { setSelectedLead(null); setQuotations([]); return; }
+        setSelectedLead(lead);
         setQuotations([]);
-        setError('');
-        setMessage('');
-
-        if (!leadId) return;
-
         try {
-            const data = await requestSales(`leads/${leadId}/quotations`);
+            const data = await salesApi.getQuotationsByLead(lead.id);
             setQuotations(data.quotations || []);
-        } catch (err) {
-            setError(err.message);
-        }
+        } catch (err) { showErr(err.message); }
     };
 
-    const handleCreateQuotation = async (event) => {
-        event.preventDefault();
-        if (!selectedLeadId) {
-            setError('Please select a lead first');
-            return;
-        }
-
-        setError('');
-        setMessage('');
-        setIsLoading(true);
-
+    // ── create lead ───────────────────────────────────────────────────────────
+    const handleCreateLead = async (e) => {
+        e.preventDefault();
+        setIsLoading(true); setError(''); setMessage('');
         try {
-            await requestSales('quotations', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    leadId: selectedLeadId,
-                    basePrice: parseFloat(quotationForm.basePrice),
-                }),
-            });
-            setQuotationForm({ basePrice: '' });
-            setMessage('Quotation created successfully');
-
-            const data = await requestSales(`leads/${selectedLeadId}/quotations`);
-            setQuotations(data.quotations || []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleExcelUpload = async (event) => {
-        event.preventDefault();
-        if (!excelFile) {
-            setError('Please select an Excel file to upload');
-            return;
-        }
-
-        setError('');
-        setMessage('');
-        setIsLoading(true);
-
-        try {
-            const formData = new FormData();
-            formData.append('file', excelFile);
-
-            const response = await fetch(`${API_BASE_URL}/api/sales/import-excel`, {
-                method: 'POST',
-                body: formData,
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data?.message || 'Failed to import Excel file');
-            }
-
-            setMessage(
-                data.message ||
-                `Imported ${data.count || 0} leads from Excel file.`,
-            );
-            setExcelFile(null);
-            (event.target.reset?.() || null);
+            await salesApi.createLead(leadClientName, leadRequirement);
+            setLeadClientName('');
+            setLeadRequirement('');
+            showMsg('Lead created successfully.');
             await fetchLeads();
-        } catch (err) {
-            console.error(err);
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (err) { showErr(err.message); }
+        finally { setIsLoading(false); }
     };
+
+    // ── create quotation ──────────────────────────────────────────────────────
+    const handleCreateQuotation = async (e) => {
+        e.preventDefault();
+        if (!selectedLead) { showErr('Select a lead first.'); return; }
+        setIsLoading(true); setError(''); setMessage('');
+        try {
+            await salesApi.createQuotation(selectedLead.id, parseFloat(quotationBasePrice));
+            setQuotationBasePrice('');
+            showMsg('Quotation created.');
+            const [qData, lData] = await Promise.all([
+                salesApi.getQuotationsByLead(selectedLead.id),
+                salesApi.getLeads(),
+            ]);
+            setQuotations(qData.quotations || []);
+            setLeads(lData.leads || []);
+        } catch (err) { showErr(err.message); }
+        finally { setIsLoading(false); }
+    };
+
+    // ── negotiate ─────────────────────────────────────────────────────────────
+    const handleNegotiate = async (e) => {
+        e.preventDefault();
+        if (!negQuotationId) { showErr('Enter a quotation ID.'); return; }
+        setIsLoading(true); setError(''); setMessage('');
+        try {
+            await salesApi.negotiateQuotation(
+                negQuotationId,
+                negPrice ? parseFloat(negPrice) : undefined,
+                negStatus,
+            );
+            showMsg(`Quotation ${negStatus} successfully.`);
+            setNegQuotationId(''); setNegPrice(''); setNegStatus('APPROVED');
+            if (selectedLead) {
+                const data = await salesApi.getQuotationsByLead(selectedLead.id);
+                setQuotations(data.quotations || []);
+            }
+        } catch (err) { showErr(err.message); }
+        finally { setIsLoading(false); }
+    };
+
+    // ── create sales order ────────────────────────────────────────────────────
+    const handleCreateSalesOrder = async (quotation) => {
+        setIsLoading(true); setError(''); setMessage(''); setCreatedSO(null);
+        try {
+            const data = await productionApi.createSalesOrder(quotation.id);
+            const so = data.salesOrder;
+            const entry = {
+                id: so?.id,
+                clientName: selectedLead?.clientName || '—',
+                requirement: selectedLead?.requirement || '',
+                quotationId: quotation.id,
+                basePrice: quotation.basePrice,
+                negotiatedPrice: quotation.negotiatedPrice,
+                createdAt: new Date().toISOString(),
+            };
+            saveSO(entry);
+            setSavedSOs(loadSavedSOs());
+            setCreatedSO(entry);
+            showMsg(`Sales Order created! ID: ${so?.id}`);
+        } catch (err) { showErr(err.message); }
+        finally { setIsLoading(false); }
+    };
+
+    // ── excel import ──────────────────────────────────────────────────────────
+    const handleExcelUpload = async (e) => {
+        e.preventDefault();
+        if (!excelFile) { showErr('Select an Excel file.'); return; }
+        setIsLoading(true); setError(''); setMessage('');
+        try {
+            const data = await salesApi.importLeadsFromExcel(excelFile);
+            showMsg(data.message || `Imported ${data.count || 0} leads.`);
+            setExcelFile(null);
+            e.target.reset();
+            await fetchLeads();
+        } catch (err) { showErr(err.message); }
+        finally { setIsLoading(false); }
+    };
+
+    // ── derived ───────────────────────────────────────────────────────────────
+    const statusColor = (s = '') => {
+        const v = (s || '').toUpperCase();
+        if (v === 'APPROVED') return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20';
+        if (v === 'REJECTED') return 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20';
+        return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';
+    };
+
+    const leadStatusOptions = ['ALL', 'new', 'pending', 'qualified', 'won', 'lost'];
+    const [leadFilter, setLeadFilter] = useState('ALL');
+    const filteredLeads = leadFilter === 'ALL' ? leads : leads.filter(l => (l.status || 'new').toLowerCase() === leadFilter);
+
+    const filteredSOs = soFilter === 'ALL' ? savedSOs : savedSOs.filter(s => {
+        if (soFilter === 'recent') return new Date(s.createdAt) > new Date(Date.now() - 7 * 86400000);
+        return true;
+    });
+
+    const tabs = [
+        { id: 'leads',     label: 'Leads & Quotations', icon: ShoppingCart },
+        { id: 'negotiate', label: 'Negotiate',           icon: CheckCircle2 },
+        { id: 'orders',    label: `Sales Orders (${savedSOs.length})`, icon: CheckCircle2 },
+        { id: 'excel',     label: 'Import Excel',        icon: Upload },
+    ];
+
+    const inputCls = 'w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm';
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Sales: Leads & Quotations</h1>
-                    <p className="text-slate-500">
-                        Capture new enquiries, generate quotations, and import leads from Excel.
-                    </p>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Sales: Leads &amp; Quotations</h1>
+                    <p className="text-slate-500 dark:text-slate-400">Capture enquiries, generate quotations, and close sales orders.</p>
                 </div>
-                <div className="flex gap-3">
-                    <button
-                        type="button"
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-sm flex items-center gap-2"
-                    >
-                        <Plus className="h-5 w-5" />
-                        New Lead
-                    </button>
+                <div className="flex gap-2 flex-wrap">
+                    {tabs.map(({ id, label }) => (
+                        <button key={id} onClick={() => { setActiveTab(id); setCreatedSO(null); }}
+                            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                            {label}
+                        </button>
+                    ))}
                 </div>
             </div>
 
-            {(error || message) && (
-                <div className="space-y-2">
-                    {error && (
-                        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
-                            {error}
-                        </p>
-                    )}
-                    {message && (
-                        <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                            {message}
-                        </p>
+            {/* Feedback */}
+            {error   && <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-400"><X className="h-4 w-4 shrink-0 mt-0.5" />{error}</div>}
+            {message && <div className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />{message}</div>}
+
+            {/* ── New Sales Order Created Banner ── */}
+            {createdSO && (
+                <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl p-5">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300 mb-1">Sales Order Created Successfully!</p>
+                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3">Share this ID with Production, Shipping, and other teams.</p>
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-4 py-2.5 flex items-center gap-3">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Sales Order ID</span>
+                                    <code className="text-sm font-bold font-mono text-indigo-700 dark:text-indigo-300">{createdSO.id}</code>
+                                    <button onClick={() => navigator.clipboard.writeText(createdSO.id)}
+                                        className="p-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-500">
+                                        <Copy className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                                <button onClick={() => { setActiveTab('orders'); setCreatedSO(null); }}
+                                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                                    View all Sales Orders →
+                                </button>
+                            </div>
+                        </div>
+                        <button onClick={() => setCreatedSO(null)} className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 shrink-0"><X className="h-4 w-4" /></button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── LEADS TAB ── */}
+            {activeTab === 'leads' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-5">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Create Lead</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Capture a new enquiry.</p>
+                        </div>
+                        <form className="space-y-4" onSubmit={handleCreateLead}>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Client Name</label>
+                                <input type="text" value={leadClientName} onChange={e => setLeadClientName(e.target.value)}
+                                    className={inputCls} placeholder="e.g. Acme Steel Pvt Ltd" required />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Requirement</label>
+                                <textarea rows={3} value={leadRequirement} onChange={e => setLeadRequirement(e.target.value)}
+                                    className={inputCls} placeholder="Custom machine line…" required />
+                            </div>
+                            <button type="submit" disabled={isLoading}
+                                className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                                {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Saving…</> : <><Plus className="h-4 w-4" />Create Lead</>}
+                            </button>
+                        </form>
+
+                        {selectedLead && (
+                            <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
+                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                                    Add Quotation — <span className="text-indigo-600 dark:text-indigo-400">{selectedLead.clientName}</span>
+                                </p>
+                                <form className="flex gap-2" onSubmit={handleCreateQuotation}>
+                                    <input type="number" step="0.01" min="0" value={quotationBasePrice}
+                                        onChange={e => setQuotationBasePrice(e.target.value)}
+                                        className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                                        placeholder="Base price (₹)" required />
+                                    <button type="submit" disabled={isLoading}
+                                        className="inline-flex items-center gap-1 bg-slate-900 dark:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 disabled:opacity-60">
+                                        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}Add
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">All Leads</h2>
+                            <div className="flex gap-2 flex-wrap">
+                                {leadStatusOptions.map(s => (
+                                    <button key={s} onClick={() => setLeadFilter(s)}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${leadFilter === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-300'}`}>
+                                        {s === 'ALL' ? `All (${leads.length})` : s}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            {leadsLoading ? (
+                                <div className="flex items-center justify-center py-12 text-slate-400"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading…</div>
+                            ) : filteredLeads.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-500">
+                                    <ShoppingCart className="h-10 w-10 mb-2 opacity-30" />
+                                    <p className="text-sm">{leads.length === 0 ? 'No leads yet. Create one on the left.' : 'No leads match this filter.'}</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <table className="min-w-full text-sm text-left">
+                                        <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
+                                            <tr>
+                                                <th className="px-4 py-3">Client</th>
+                                                <th className="px-4 py-3">Requirement</th>
+                                                <th className="px-4 py-3">Status</th>
+                                                <th className="px-4 py-3 text-right">Quotes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                            {filteredLeads.map((lead) => (
+                                                <tr key={lead.id} onClick={() => handleSelectLead(lead)}
+                                                    className={`cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${selectedLead?.id === lead.id ? 'bg-indigo-50/70 dark:bg-indigo-500/10 border-l-2 border-indigo-500' : ''}`}>
+                                                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{lead.clientName}</td>
+                                                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-xs truncate">{lead.requirement}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusColor(lead.status)}`}>{lead.status || 'NEW'}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400">{lead.quotations?.length || 0}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+
+                                    {selectedLead && (
+                                        <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20 p-4">
+                                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">
+                                                Quotations — {selectedLead.clientName}
+                                            </h3>
+                                            {quotations.length === 0 ? (
+                                                <p className="text-sm text-slate-400 dark:text-slate-500 py-3 text-center">No quotations yet.</p>
+                                            ) : (
+                                                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-700">
+                                                    <table className="min-w-full text-sm">
+                                                        <thead className="bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
+                                                            <tr>
+                                                                <th className="px-4 py-2 text-left">ID</th>
+                                                                <th className="px-4 py-2 text-left">Base Price</th>
+                                                                <th className="px-4 py-2 text-left">Negotiated</th>
+                                                                <th className="px-4 py-2 text-left">Status</th>
+                                                                <th className="px-4 py-2 text-right">Action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                            {quotations.map((q) => (
+                                                                <tr key={q.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                                                    <td className="px-4 py-2">
+                                                                        <CopyBtn text={q.id} />
+                                                                    </td>
+                                                                    <td className="px-4 py-2 dark:text-slate-300">₹{q.basePrice?.toLocaleString('en-IN')}</td>
+                                                                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{q.negotiatedPrice != null ? `₹${q.negotiatedPrice?.toLocaleString('en-IN')}` : '—'}</td>
+                                                                    <td className="px-4 py-2">
+                                                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusColor(q.status)}`}>{q.status || 'PENDING'}</span>
+                                                                    </td>
+                                                                    <td className="px-4 py-2 text-right">
+                                                                        {q.status === 'APPROVED' ? (
+                                                                            <button onClick={() => handleCreateSalesOrder(q)} disabled={isLoading}
+                                                                                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-40">
+                                                                                Create Sales Order →
+                                                                            </button>
+                                                                        ) : (
+                                                                            <button onClick={() => { setActiveTab('negotiate'); setNegQuotationId(q.id); }}
+                                                                                className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline">
+                                                                                Negotiate →
+                                                                            </button>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── NEGOTIATE TAB ── */}
+            {activeTab === 'negotiate' && (
+                <div className="max-w-xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-5">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Negotiate / Approve Quotation</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Set final price and approve or reject a quotation.</p>
+                    </div>
+                    <form className="space-y-4" onSubmit={handleNegotiate}>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quotation ID</label>
+                            <input type="text" value={negQuotationId} onChange={e => setNegQuotationId(e.target.value)}
+                                className={inputCls + ' font-mono'}
+                                placeholder="Full quotation UUID" required />
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                Tip: click "Negotiate →" on a quotation row — it auto-fills the full ID here.
+                            </p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Negotiated Price (₹) — optional</label>
+                            <input type="number" step="0.01" min="0" value={negPrice} onChange={e => setNegPrice(e.target.value)}
+                                className={inputCls} placeholder="Leave blank to keep base price" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Decision</label>
+                            <select value={negStatus} onChange={e => setNegStatus(e.target.value)} className={inputCls}>
+                                <option value="APPROVED">APPROVED</option>
+                                <option value="REJECTED">REJECTED</option>
+                                <option value="PENDING_APPROVAL">PENDING_APPROVAL</option>
+                            </select>
+                        </div>
+                        <button type="submit" disabled={isLoading}
+                            className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                            {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Saving…</> : <><CheckCircle2 className="h-4 w-4" />Update Quotation</>}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            {/* ── SALES ORDERS TAB ── */}
+            {activeTab === 'orders' && (
+                <div className="space-y-4">
+                    <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl px-4 py-3 text-sm text-indigo-700 dark:text-indigo-300">
+                        These are Sales Order IDs created in this browser session. Share them with Production, Shipping, and Quality Control teams.
+                    </div>
+
+                    {/* Filters */}
+                    <div className="flex gap-2 flex-wrap items-center">
+                        {['ALL', 'recent'].map(f => (
+                            <button key={f} onClick={() => setSoFilter(f)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${soFilter === f ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-300'}`}>
+                                {f === 'ALL' ? `All (${savedSOs.length})` : 'Last 7 days'}
+                            </button>
+                        ))}
+                    </div>
+
+                    {filteredSOs.length === 0 ? (
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-16 text-center text-slate-400 dark:text-slate-500">
+                            <ShoppingCart className="h-10 w-10 mx-auto mb-3 opacity-25" />
+                            <p className="text-sm">No sales orders created yet.</p>
+                            <p className="text-xs mt-1">Approve a quotation and click "Create Sales Order →" on the Leads tab.</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                            <table className="min-w-full text-sm text-left">
+                                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
+                                    <tr>
+                                        <th className="px-5 py-3">Sales Order ID (Full)</th>
+                                        <th className="px-5 py-3">Client</th>
+                                        <th className="px-5 py-3">Requirement</th>
+                                        <th className="px-5 py-3">Value</th>
+                                        <th className="px-5 py-3">Created</th>
+                                        <th className="px-5 py-3">Copy</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {filteredSOs.map((so) => (
+                                        <tr key={so.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                            <td className="px-5 py-3">
+                                                <code className="text-xs font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded">
+                                                    {so.id}
+                                                </code>
+                                            </td>
+                                            <td className="px-5 py-3 font-semibold text-slate-900 dark:text-white">{so.clientName}</td>
+                                            <td className="px-5 py-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate">{so.requirement || '—'}</td>
+                                            <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
+                                                {so.negotiatedPrice ? `₹${so.negotiatedPrice.toLocaleString('en-IN')}` : so.basePrice ? `₹${so.basePrice.toLocaleString('en-IN')}` : '—'}
+                                            </td>
+                                            <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{new Date(so.createdAt).toLocaleDateString()}</td>
+                                            <td className="px-5 py-3">
+                                                <button
+                                                    onClick={() => navigator.clipboard.writeText(so.id)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-semibold transition-colors">
+                                                    <Copy className="h-3.5 w-3.5" />Copy ID
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Leads form + list */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6 lg:col-span-1">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Create Sales Lead</h2>
-                        <p className="text-sm text-slate-500">
-                            Capture basic enquiry details from your prospects.
-                        </p>
-                    </div>
-
-                    <form className="space-y-4" onSubmit={handleCreateLead}>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Client Name
-                            </label>
-                            <input
-                                type="text"
-                                value={leadForm.clientName}
-                                onChange={(e) =>
-                                    setLeadForm((prev) => ({ ...prev, clientName: e.target.value }))
-                                }
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                                placeholder="e.g. Acme Steel Pvt Ltd"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Requirement / Notes
-                            </label>
-                            <textarea
-                                value={leadForm.requirement}
-                                onChange={(e) =>
-                                    setLeadForm((prev) => ({ ...prev, requirement: e.target.value }))
-                                }
-                                rows={3}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                                placeholder="e.g. Need custom machine line for automotive components…"
-                                required
-                            />
-                        </div>
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Saving…
-                                </>
-                            ) : (
-                                <>
-                                    <Plus className="h-4 w-4" />
-                                    Create Lead
-                                </>
-                            )}
-                        </button>
-                    </form>
-                </div>
-
-                {/* Leads table */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4 lg:col-span-2">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold text-slate-900">Leads</h2>
-                            <p className="text-sm text-slate-500">
-                                Select a lead to view or create quotations.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="overflow-x-auto rounded-xl border border-slate-100">
-                        <table className="min-w-full text-sm text-left">
-                            <thead className="bg-slate-50">
-                                <tr className="text-slate-500">
-                                    <th className="px-4 py-2">Client</th>
-                                    <th className="px-4 py-2">Requirement</th>
-                                    <th className="px-4 py-2">Status</th>
-                                    <th className="px-4 py-2 text-right">Quotations</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {leads.length === 0 ? (
-                                    <tr>
-                                        <td
-                                            colSpan={4}
-                                            className="px-4 py-6 text-center text-slate-400"
-                                        >
-                                            No leads found yet. Create one using the form on the left
-                                            or import from Excel below.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    leads.map((lead) => (
-                                        <tr
-                                            key={lead.id}
-                                            className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 ${
-                                                selectedLeadId === lead.id ? 'bg-indigo-50/60' : ''
-                                            }`}
-                                            onClick={() => handleSelectLead(lead.id)}
-                                        >
-                                            <td className="px-4 py-2 font-medium text-slate-900">
-                                                {lead.clientName}
-                                            </td>
-                                            <td className="px-4 py-2 text-slate-600 max-w-xs truncate">
-                                                {lead.requirement}
-                                            </td>
-                                            <td className="px-4 py-2">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700">
-                                                    {lead.status || 'NEW'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-2 text-right text-slate-500">
-                                                {(lead.quotations?.length || 0) || 0} quotations
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            {/* Quotations + Excel import */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4 lg:col-span-2">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold text-slate-900">Quotations</h2>
-                            <p className="text-sm text-slate-500">
-                                For the selected lead, manage base price and negotiation.
-                            </p>
-                        </div>
-                    </div>
-
-                    {!selectedLeadId ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
-                            <FileText className="h-10 w-10 mb-3" />
-                            <p className="text-sm">
-                                Select a lead from the table above to view its quotations.
-                            </p>
-                        </div>
-                    ) : (
-                        <>
-                            <form className="flex flex-col md:flex-row gap-3 items-end mb-4" onSubmit={handleCreateQuotation}>
-                                <div className="w-full md:w-1/3">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        Base Price (₹)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={quotationForm.basePrice}
-                                        onChange={(e) =>
-                                            setQuotationForm({ basePrice: e.target.value })
-                                        }
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                                        placeholder="e.g. 250000"
-                                        required
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={isLoading}
-                                    className="inline-flex items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            Saving…
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Plus className="h-4 w-4" />
-                                            Add Quotation
-                                        </>
-                                    )}
-                                </button>
-                            </form>
-
-                            <div className="overflow-x-auto rounded-xl border border-slate-100">
-                                <table className="min-w-full text-sm text-left">
-                                    <thead className="bg-slate-50">
-                                        <tr className="text-slate-500">
-                                            <th className="px-4 py-2">Quotation ID</th>
-                                            <th className="px-4 py-2">Base Price</th>
-                                            <th className="px-4 py-2">Negotiated Price</th>
-                                            <th className="px-4 py-2">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {quotations.length === 0 ? (
-                                            <tr>
-                                                <td
-                                                    colSpan={4}
-                                                    className="px-4 py-6 text-center text-slate-400"
-                                                >
-                                                    No quotations yet for this lead.
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            quotations.map((q) => (
-                                                <tr
-                                                    key={q.id}
-                                                    className="border-t border-slate-100"
-                                                >
-                                                    <td className="px-4 py-2 font-mono text-xs text-slate-500">
-                                                        {q.id}
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        ₹{q.basePrice?.toLocaleString?.('en-IN') ?? q.basePrice}
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        {q.negotiatedPrice != null
-                                                            ? `₹${q.negotiatedPrice?.toLocaleString?.('en-IN') ?? q.negotiatedPrice
-                                                            }`
-                                                            : <span className="text-slate-400">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
-                                                            {q.status || 'PENDING_APPROVAL'}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                {/* Excel import card */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+            {/* ── EXCEL TAB ── */}
+            {activeTab === 'excel' && (
+                <div className="max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-5">
                     <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                            <Upload className="h-5 w-5 text-indigo-600" />
+                        <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                            <Upload className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-slate-900">
-                                Import Leads from Excel
-                            </h2>
-                            <p className="text-sm text-slate-500">
-                                Upload an .xlsx file to bulk-create leads and optional base
-                                quotations.
-                            </p>
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Import Leads from Excel</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Bulk-create leads from an .xlsx file.</p>
                         </div>
                     </div>
-
-                    <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500">
-                        <p className="font-semibold mb-1">Expected columns:</p>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-xs text-slate-500 dark:text-slate-400">
+                        <p className="font-semibold mb-1">Required columns:</p>
                         <ul className="list-disc list-inside space-y-0.5">
-                            <li><span className="font-medium">Client Name</span> – customer name</li>
-                            <li><span className="font-medium">Requirement</span> – enquiry / requirement</li>
-                            <li><span className="font-medium">Base Price</span> (optional) – creates initial quotation</li>
+                            <li><span className="font-medium">Client Name</span> — customer name</li>
+                            <li><span className="font-medium">Requirement</span> — enquiry detail</li>
+                            <li><span className="font-medium">Base Price</span> (optional)</li>
                         </ul>
                     </div>
-
                     <form className="space-y-3" onSubmit={handleExcelUpload}>
-                        <input
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
-                            className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                        />
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full inline-flex items-center justify-center gap-2 border border-slate-200 text-slate-800 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Uploading…
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="h-4 w-4" />
-                                    Upload Excel & Import
-                                </>
-                            )}
+                        <input type="file" accept=".xlsx,.xls" onChange={e => setExcelFile(e.target.files?.[0] || null)}
+                            className="block w-full text-sm text-slate-600 dark:text-slate-400 file:mr-4 file:py-2 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 dark:file:bg-indigo-500/20 file:text-indigo-700 dark:file:text-indigo-400 hover:file:bg-indigo-100" />
+                        <button type="submit" disabled={isLoading}
+                            className="w-full inline-flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60">
+                            {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Uploading…</> : <><Upload className="h-4 w-4" />Upload &amp; Import</>}
                         </button>
                     </form>
-                    <p className="text-[11px] text-slate-400">
-                        We only read the first worksheet in your file. Invalid rows (without
-                        client name or requirement) are skipped automatically.
-                    </p>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
