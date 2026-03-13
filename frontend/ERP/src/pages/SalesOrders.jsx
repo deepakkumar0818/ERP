@@ -1,17 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ShoppingCart, Plus, Upload, Loader2, CheckCircle2, X, Copy, Check } from 'lucide-react';
+import { ShoppingCart, Plus, Upload, Loader2, CheckCircle2, X, Copy, Check, RefreshCw } from 'lucide-react';
 import { salesApi, productionApi } from '../api/api';
-
-const SO_STORE_KEY = 'erp_sales_orders';
-
-function loadSavedSOs() {
-    try { return JSON.parse(localStorage.getItem(SO_STORE_KEY) || '[]'); } catch { return []; }
-}
-function saveSO(entry) {
-    const existing = loadSavedSOs();
-    if (existing.some(s => s.id === entry.id)) return;
-    localStorage.setItem(SO_STORE_KEY, JSON.stringify([entry, ...existing]));
-}
 
 function CopyBtn({ text }) {
     const [copied, setCopied] = useState(false);
@@ -35,16 +24,19 @@ export default function SalesOrders() {
     const [leads, setLeads]               = useState([]);
     const [selectedLead, setSelectedLead] = useState(null);
     const [quotations, setQuotations]     = useState([]);
-    const [savedSOs, setSavedSOs]         = useState(loadSavedSOs);
+    const [salesOrders, setSalesOrders]   = useState([]);
+    const [sosLoading, setSosLoading]     = useState(true);
 
-    // ── form state (flat, never nested inside render) ─────────────────────────
-    const [leadClientName, setLeadClientName]     = useState('');
-    const [leadRequirement, setLeadRequirement]   = useState('');
+    // ── form state ────────────────────────────────────────────────────────────
+    const [leadClientName, setLeadClientName]         = useState('');
+    const [leadRequirement, setLeadRequirement]       = useState('');
     const [quotationBasePrice, setQuotationBasePrice] = useState('');
-    const [negQuotationId, setNegQuotationId]     = useState('');
-    const [negPrice, setNegPrice]                 = useState('');
-    const [negStatus, setNegStatus]               = useState('APPROVED');
-    const [excelFile, setExcelFile]               = useState(null);
+    const [negLeadId, setNegLeadId]                   = useState('');
+    const [negQuotations, setNegQuotations]           = useState([]);
+    const [negQuotationId, setNegQuotationId]         = useState('');
+    const [negPrice, setNegPrice]                     = useState('');
+    const [negStatus, setNegStatus]                   = useState('APPROVED');
+    const [excelFile, setExcelFile]                   = useState(null);
 
     // ── UI state ──────────────────────────────────────────────────────────────
     const [activeTab, setActiveTab]       = useState('leads');
@@ -53,7 +45,8 @@ export default function SalesOrders() {
     const [leadsLoading, setLeadsLoading] = useState(true);
     const [message, setMessage]           = useState('');
     const [error, setError]               = useState('');
-    const [createdSO, setCreatedSO]       = useState(null); // newly created SO banner
+    const [createdSO, setCreatedSO]       = useState(null);
+    const [leadFilter, setLeadFilter]     = useState('ALL');
 
     const showMsg = (m) => { setMessage(m); setError(''); };
     const showErr = (e) => { setError(e);   setMessage(''); };
@@ -68,7 +61,30 @@ export default function SalesOrders() {
         finally { setLeadsLoading(false); }
     }, []);
 
-    useEffect(() => { fetchLeads(); }, [fetchLeads]);
+    // ── fetch all sales orders from DB ────────────────────────────────────────
+    const fetchSalesOrders = useCallback(async () => {
+        setSosLoading(true);
+        try {
+            const data = await productionApi.getAll();
+            setSalesOrders(
+                (data.salesOrders || []).map(so => ({
+                    id: so.id,
+                    clientName: so.quotation?.lead?.clientName || '—',
+                    requirement: so.quotation?.lead?.requirement || '',
+                    basePrice: so.quotation?.basePrice,
+                    negotiatedPrice: so.quotation?.negotiatedPrice,
+                    status: so.status,
+                    createdAt: so.createdAt,
+                }))
+            );
+        } catch (err) { showErr(err.message); }
+        finally { setSosLoading(false); }
+    }, []);
+
+    useEffect(() => {
+        fetchLeads();
+        fetchSalesOrders();
+    }, [fetchLeads, fetchSalesOrders]);
 
     // ── lead selection ────────────────────────────────────────────────────────
     const handleSelectLead = async (lead) => {
@@ -114,10 +130,22 @@ export default function SalesOrders() {
         finally { setIsLoading(false); }
     };
 
-    // ── negotiate ─────────────────────────────────────────────────────────────
+    // ── negotiate: lead selection → load quotations ───────────────────────────
+    const handleNegLeadChange = async (leadId) => {
+        setNegLeadId(leadId);
+        setNegQuotationId('');
+        setNegQuotations([]);
+        if (!leadId) return;
+        try {
+            const data = await salesApi.getQuotationsByLead(leadId);
+            setNegQuotations(data.quotations || []);
+        } catch (err) { showErr(err.message); }
+    };
+
+    // ── negotiate: submit ─────────────────────────────────────────────────────
     const handleNegotiate = async (e) => {
         e.preventDefault();
-        if (!negQuotationId) { showErr('Enter a quotation ID.'); return; }
+        if (!negQuotationId) { showErr('Select a quotation.'); return; }
         setIsLoading(true); setError(''); setMessage('');
         try {
             await salesApi.negotiateQuotation(
@@ -126,10 +154,16 @@ export default function SalesOrders() {
                 negStatus,
             );
             showMsg(`Quotation ${negStatus} successfully.`);
-            setNegQuotationId(''); setNegPrice(''); setNegStatus('APPROVED');
-            if (selectedLead) {
-                const data = await salesApi.getQuotationsByLead(selectedLead.id);
-                setQuotations(data.quotations || []);
+            setNegPrice('');
+            setNegStatus('APPROVED');
+            // Refresh quotations list for the selected lead in negotiate tab
+            const data = await salesApi.getQuotationsByLead(negLeadId);
+            setNegQuotations(data.quotations || []);
+            setNegQuotationId('');
+            // Also refresh the leads tab quotations if same lead is selected
+            if (selectedLead?.id === negLeadId) {
+                const qData = await salesApi.getQuotationsByLead(negLeadId);
+                setQuotations(qData.quotations || []);
             }
         } catch (err) { showErr(err.message); }
         finally { setIsLoading(false); }
@@ -145,15 +179,15 @@ export default function SalesOrders() {
                 id: so?.id,
                 clientName: selectedLead?.clientName || '—',
                 requirement: selectedLead?.requirement || '',
-                quotationId: quotation.id,
                 basePrice: quotation.basePrice,
                 negotiatedPrice: quotation.negotiatedPrice,
-                createdAt: new Date().toISOString(),
+                status: so?.status || 'CONFIRMED',
+                createdAt: so?.createdAt || new Date().toISOString(),
             };
-            saveSO(entry);
-            setSavedSOs(loadSavedSOs());
             setCreatedSO(entry);
-            showMsg(`Sales Order created! ID: ${so?.id}`);
+            showMsg(`Sales Order created!`);
+            // Refresh from DB
+            await fetchSalesOrders();
         } catch (err) { showErr(err.message); }
         finally { setIsLoading(false); }
     };
@@ -176,25 +210,25 @@ export default function SalesOrders() {
     // ── derived ───────────────────────────────────────────────────────────────
     const statusColor = (s = '') => {
         const v = (s || '').toUpperCase();
-        if (v === 'APPROVED') return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20';
-        if (v === 'REJECTED') return 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20';
+        if (v === 'APPROVED')   return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20';
+        if (v === 'REJECTED')   return 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20';
+        if (v === 'CONFIRMED')  return 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20';
         return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';
     };
 
     const leadStatusOptions = ['ALL', 'new', 'pending', 'qualified', 'won', 'lost'];
-    const [leadFilter, setLeadFilter] = useState('ALL');
     const filteredLeads = leadFilter === 'ALL' ? leads : leads.filter(l => (l.status || 'new').toLowerCase() === leadFilter);
 
-    const filteredSOs = soFilter === 'ALL' ? savedSOs : savedSOs.filter(s => {
+    const filteredSOs = soFilter === 'ALL' ? salesOrders : salesOrders.filter(s => {
         if (soFilter === 'recent') return new Date(s.createdAt) > new Date(Date.now() - 7 * 86400000);
         return true;
     });
 
     const tabs = [
-        { id: 'leads',     label: 'Leads & Quotations', icon: ShoppingCart },
-        { id: 'negotiate', label: 'Negotiate',           icon: CheckCircle2 },
-        { id: 'orders',    label: `Sales Orders (${savedSOs.length})`, icon: CheckCircle2 },
-        { id: 'excel',     label: 'Import Excel',        icon: Upload },
+        { id: 'leads',     label: 'Leads & Quotations' },
+        { id: 'negotiate', label: 'Negotiate'           },
+        { id: 'orders',    label: `Sales Orders (${salesOrders.length})` },
+        { id: 'excel',     label: 'Import Excel'        },
     ];
 
     const inputCls = 'w-full px-3 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm';
@@ -209,7 +243,7 @@ export default function SalesOrders() {
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     {tabs.map(({ id, label }) => (
-                        <button key={id} onClick={() => { setActiveTab(id); setCreatedSO(null); }}
+                        <button key={id} onClick={() => { setActiveTab(id); setCreatedSO(null); setError(''); setMessage(''); }}
                             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                             {label}
                         </button>
@@ -221,13 +255,13 @@ export default function SalesOrders() {
             {error   && <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-400"><X className="h-4 w-4 shrink-0 mt-0.5" />{error}</div>}
             {message && <div className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />{message}</div>}
 
-            {/* ── New Sales Order Created Banner ── */}
+            {/* ── New Sales Order Banner ── */}
             {createdSO && (
                 <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl p-5">
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300 mb-1">Sales Order Created Successfully!</p>
-                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3">Share this ID with Production, Shipping, and other teams.</p>
+                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3">Client: <strong>{createdSO.clientName}</strong></p>
                             <div className="flex items-center gap-3 flex-wrap">
                                 <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-4 py-2.5 flex items-center gap-3">
                                     <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Sales Order ID</span>
@@ -344,7 +378,7 @@ export default function SalesOrders() {
                                                 Quotations — {selectedLead.clientName}
                                             </h3>
                                             {quotations.length === 0 ? (
-                                                <p className="text-sm text-slate-400 dark:text-slate-500 py-3 text-center">No quotations yet.</p>
+                                                <p className="text-sm text-slate-400 dark:text-slate-500 py-3 text-center">No quotations yet. Add one above.</p>
                                             ) : (
                                                 <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-700">
                                                     <table className="min-w-full text-sm">
@@ -360,9 +394,7 @@ export default function SalesOrders() {
                                                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                                             {quotations.map((q) => (
                                                                 <tr key={q.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                                    <td className="px-4 py-2">
-                                                                        <CopyBtn text={q.id} />
-                                                                    </td>
+                                                                    <td className="px-4 py-2"><CopyBtn text={q.id} /></td>
                                                                     <td className="px-4 py-2 dark:text-slate-300">₹{q.basePrice?.toLocaleString('en-IN')}</td>
                                                                     <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{q.negotiatedPrice != null ? `₹${q.negotiatedPrice?.toLocaleString('en-IN')}` : '—'}</td>
                                                                     <td className="px-4 py-2">
@@ -375,7 +407,11 @@ export default function SalesOrders() {
                                                                                 Create Sales Order →
                                                                             </button>
                                                                         ) : (
-                                                                            <button onClick={() => { setActiveTab('negotiate'); setNegQuotationId(q.id); }}
+                                                                            <button onClick={async () => {
+                                                                                setActiveTab('negotiate');
+                                                                                await handleNegLeadChange(selectedLead.id);
+                                                                                setNegQuotationId(q.id);
+                                                                            }}
                                                                                 className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline">
                                                                                 Negotiate →
                                                                             </button>
@@ -404,41 +440,108 @@ export default function SalesOrders() {
                         <p className="text-sm text-slate-500 dark:text-slate-400">Set final price and approve or reject a quotation.</p>
                     </div>
                     <form className="space-y-4" onSubmit={handleNegotiate}>
+                        {/* Step 1: Select Lead */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quotation ID</label>
-                            <input type="text" value={negQuotationId} onChange={e => setNegQuotationId(e.target.value)}
-                                className={inputCls + ' font-mono'}
-                                placeholder="Full quotation UUID" required />
-                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                Tip: click "Negotiate →" on a quotation row — it auto-fills the full ID here.
-                            </p>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Step 1 — Select Lead
+                            </label>
+                            <select value={negLeadId} onChange={e => handleNegLeadChange(e.target.value)} className={inputCls}>
+                                <option value="">{leadsLoading ? 'Loading…' : leads.length === 0 ? 'No leads found' : '— Select a lead —'}</option>
+                                {leads.map(l => (
+                                    <option key={l.id} value={l.id}>{l.clientName}</option>
+                                ))}
+                            </select>
                         </div>
+
+                        {/* Step 2: Select Quotation */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Negotiated Price (₹) — optional</label>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Step 2 — Select Quotation
+                            </label>
+                            <select value={negQuotationId} onChange={e => setNegQuotationId(e.target.value)} className={inputCls} required disabled={!negLeadId}>
+                                <option value="">
+                                    {!negLeadId
+                                        ? 'Select a lead first'
+                                        : negQuotations.length === 0
+                                            ? 'No quotations for this lead'
+                                            : '— Select quotation —'}
+                                </option>
+                                {negQuotations.map(q => (
+                                    <option key={q.id} value={q.id}>
+                                        ₹{q.basePrice?.toLocaleString('en-IN')}
+                                        {q.negotiatedPrice ? ` → ₹${q.negotiatedPrice.toLocaleString('en-IN')}` : ''}
+                                        {' '}— {q.status} — #{q.id.slice(-6).toUpperCase()}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Step 3: Negotiated Price */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Step 3 — Negotiated Price (₹) <span className="text-slate-400 font-normal">optional</span>
+                            </label>
                             <input type="number" step="0.01" min="0" value={negPrice} onChange={e => setNegPrice(e.target.value)}
-                                className={inputCls} placeholder="Leave blank to keep base price" />
+                                className={inputCls} placeholder="Leave blank to keep base price" disabled={!negQuotationId} />
                         </div>
+
+                        {/* Step 4: Decision */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Decision</label>
-                            <select value={negStatus} onChange={e => setNegStatus(e.target.value)} className={inputCls}>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Step 4 — Decision
+                            </label>
+                            <select value={negStatus} onChange={e => setNegStatus(e.target.value)} className={inputCls} disabled={!negQuotationId}>
                                 <option value="APPROVED">APPROVED</option>
                                 <option value="REJECTED">REJECTED</option>
                                 <option value="PENDING_APPROVAL">PENDING_APPROVAL</option>
                             </select>
                         </div>
-                        <button type="submit" disabled={isLoading}
+
+                        <button type="submit" disabled={isLoading || !negQuotationId}
                             className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
                             {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Saving…</> : <><CheckCircle2 className="h-4 w-4" />Update Quotation</>}
                         </button>
                     </form>
+
+                    {/* Show current quotation details */}
+                    {negQuotationId && (() => {
+                        const q = negQuotations.find(x => x.id === negQuotationId);
+                        if (!q) return null;
+                        return (
+                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 text-sm space-y-1 border border-slate-100 dark:border-slate-700">
+                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Selected Quotation Details</p>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 dark:text-slate-400">Base Price</span>
+                                    <span className="font-medium dark:text-white">₹{q.basePrice?.toLocaleString('en-IN')}</span>
+                                </div>
+                                {q.negotiatedPrice != null && (
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500 dark:text-slate-400">Negotiated Price</span>
+                                        <span className="font-medium dark:text-white">₹{q.negotiatedPrice?.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 dark:text-slate-400">Current Status</span>
+                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${statusColor(q.status)}`}>{q.status}</span>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
 
             {/* ── SALES ORDERS TAB ── */}
             {activeTab === 'orders' && (
                 <div className="space-y-4">
-                    <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl px-4 py-3 text-sm text-indigo-700 dark:text-indigo-300">
-                        These are Sales Order IDs created in this browser session. Share them with Production, Shipping, and Quality Control teams.
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            All confirmed sales orders from the database.
+                        </p>
+                        <button onClick={fetchSalesOrders} disabled={sosLoading}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+                            <RefreshCw className={`h-3.5 w-3.5 ${sosLoading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </button>
                     </div>
 
                     {/* Filters */}
@@ -446,15 +549,20 @@ export default function SalesOrders() {
                         {['ALL', 'recent'].map(f => (
                             <button key={f} onClick={() => setSoFilter(f)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${soFilter === f ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-300'}`}>
-                                {f === 'ALL' ? `All (${savedSOs.length})` : 'Last 7 days'}
+                                {f === 'ALL' ? `All (${salesOrders.length})` : 'Last 7 days'}
                             </button>
                         ))}
                     </div>
 
-                    {filteredSOs.length === 0 ? (
+                    {sosLoading ? (
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-16 text-center text-slate-400">
+                            <Loader2 className="h-8 w-8 mx-auto mb-3 animate-spin opacity-50" />
+                            <p className="text-sm">Loading sales orders…</p>
+                        </div>
+                    ) : filteredSOs.length === 0 ? (
                         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-16 text-center text-slate-400 dark:text-slate-500">
                             <ShoppingCart className="h-10 w-10 mx-auto mb-3 opacity-25" />
-                            <p className="text-sm">No sales orders created yet.</p>
+                            <p className="text-sm">No sales orders yet.</p>
                             <p className="text-xs mt-1">Approve a quotation and click "Create Sales Order →" on the Leads tab.</p>
                         </div>
                     ) : (
@@ -462,12 +570,13 @@ export default function SalesOrders() {
                             <table className="min-w-full text-sm text-left">
                                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
                                     <tr>
-                                        <th className="px-5 py-3">Sales Order ID (Full)</th>
+                                        <th className="px-5 py-3">Sales Order ID</th>
                                         <th className="px-5 py-3">Client</th>
                                         <th className="px-5 py-3">Requirement</th>
                                         <th className="px-5 py-3">Value</th>
+                                        <th className="px-5 py-3">Status</th>
                                         <th className="px-5 py-3">Created</th>
-                                        <th className="px-5 py-3">Copy</th>
+                                        <th className="px-5 py-3">Copy ID</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -475,20 +584,22 @@ export default function SalesOrders() {
                                         <tr key={so.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                                             <td className="px-5 py-3">
                                                 <code className="text-xs font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded">
-                                                    {so.id}
+                                                    {so.id.slice(-8).toUpperCase()}
                                                 </code>
                                             </td>
                                             <td className="px-5 py-3 font-semibold text-slate-900 dark:text-white">{so.clientName}</td>
-                                            <td className="px-5 py-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate">{so.requirement || '—'}</td>
+                                            <td className="px-5 py-3 text-slate-500 dark:text-slate-400 max-w-[180px] truncate">{so.requirement || '—'}</td>
                                             <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
                                                 {so.negotiatedPrice ? `₹${so.negotiatedPrice.toLocaleString('en-IN')}` : so.basePrice ? `₹${so.basePrice.toLocaleString('en-IN')}` : '—'}
                                             </td>
-                                            <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{new Date(so.createdAt).toLocaleDateString()}</td>
                                             <td className="px-5 py-3">
-                                                <button
-                                                    onClick={() => navigator.clipboard.writeText(so.id)}
+                                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusColor(so.status)}`}>{so.status || 'CONFIRMED'}</span>
+                                            </td>
+                                            <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{new Date(so.createdAt).toLocaleDateString('en-IN')}</td>
+                                            <td className="px-5 py-3">
+                                                <button onClick={() => navigator.clipboard.writeText(so.id)}
                                                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-semibold transition-colors">
-                                                    <Copy className="h-3.5 w-3.5" />Copy ID
+                                                    <Copy className="h-3.5 w-3.5" />Copy
                                                 </button>
                                             </td>
                                         </tr>

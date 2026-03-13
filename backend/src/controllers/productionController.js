@@ -70,8 +70,27 @@ const getBOMByProduct = async (req, res) => {
   }
 };
 
+// Get all sales orders with client info
+const getAllSalesOrders = async (_req, res) => {
+  try {
+    const salesOrders = await prisma.salesOrder.findMany({
+      include: {
+        quotation: {
+          include: { lead: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ salesOrders });
+  } catch (error) {
+    console.error('getAllSalesOrders error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createSalesOrder,
   addBOM,
   getBOMByProduct,
+  getAllSalesOrders,
 };

@@ -1,19 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ShieldCheck, Plus, Search, Loader2, X, RefreshCw, Copy, ChevronDown } from 'lucide-react';
-import { qualityCheckApi } from '../api/api';
+import { qualityCheckApi, jobOrderApi, inventoryApi } from '../api/api';
 
 const QC_STATUSES = ['PASSED', 'FAILED', 'PENDING'];
-const JO_STORE_KEY = 'erp_job_orders';
 
 const statusStyle = {
     PASSED:  'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20',
     FAILED:  'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-500/20',
     PENDING: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-500/20',
 };
-
-function loadLocal(key) {
-    try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
-}
 
 export default function QualityControl() {
     const [jobOrderIdInput, setJobOrderIdInput] = useState('');
@@ -31,7 +26,19 @@ export default function QualityControl() {
     const [formStatus, setFormStatus]         = useState('PENDING');
     const [formRemarks, setFormRemarks]       = useState('');
 
-    const [savedJOs] = useState(() => loadLocal(JO_STORE_KEY));
+    const [savedJOs, setSavedJOs] = useState([]);
+    const [josLoading, setJosLoading] = useState(true);
+    const [products, setProducts] = useState([]);
+
+    useEffect(() => {
+        jobOrderApi.getAll()
+            .then(d => setSavedJOs(d.jobOrders || []))
+            .catch(() => {})
+            .finally(() => setJosLoading(false));
+        inventoryApi.getAll()
+            .then(d => setProducts(d.items || []))
+            .catch(() => {});
+    }, []);
 
     const fetchChecks = useCallback(async (id) => {
         if (!id.trim()) return;
@@ -114,23 +121,18 @@ export default function QualityControl() {
                     <form onSubmit={handleAddCheck} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Job Order selector */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Job Order ID <span className="text-rose-500">*</span></label>
-                            {savedJOs.length > 0 ? (
-                                <div className="space-y-1">
-                                    <select value={formJobOrderId} onChange={e => setFormJobOrderId(e.target.value)} required className={inputCls}>
-                                        <option value="">— Select Job Order —</option>
-                                        {savedJOs.map(jo => (
-                                            <option key={jo.id} value={jo.id}>
-                                                {jo.productName} — {jo.id.slice(-8).toUpperCase()}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <p className="text-[10px] text-slate-400 font-mono truncate">{formJobOrderId || 'No JO selected'}</p>
-                                </div>
-                            ) : (
-                                <input type="text" value={formJobOrderId} onChange={e => setFormJobOrderId(e.target.value)} required
-                                    className={inputCls + ' font-mono'} placeholder="Job Order UUID" />
-                            )}
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Job Order <span className="text-rose-500">*</span></label>
+                            <select value={formJobOrderId} onChange={e => setFormJobOrderId(e.target.value)} required className={inputCls}>
+                                <option value="">{josLoading ? 'Loading…' : savedJOs.length === 0 ? 'No job orders found' : '— Select Job Order —'}</option>
+                                {savedJOs.map(jo => {
+                                    const productName = products.find(p => p.id === jo.productId)?.name || jo.productId?.slice(-8);
+                                    return (
+                                        <option key={jo.id} value={jo.id}>
+                                            {productName} — {jo.id.slice(-8).toUpperCase()}
+                                        </option>
+                                    );
+                                })}
+                            </select>
                         </div>
                         {/* Result */}
                         <div>
@@ -219,23 +221,26 @@ export default function QualityControl() {
                         </button>
                     </form>
 
-                    {/* Known Job Orders dropdown */}
+                    {/* Job Orders quick-pick */}
                     {savedJOs.length > 0 && (
                         <div>
                             <button type="button" onClick={() => setShowJODropdown(v => !v)}
                                 className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
                                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showJODropdown ? 'rotate-180' : ''}`} />
-                                {showJODropdown ? 'Hide' : 'Pick from'} {savedJOs.length} known Job Order{savedJOs.length > 1 ? 's' : ''}
+                                {showJODropdown ? 'Hide' : 'Pick from'} {savedJOs.length} Job Order{savedJOs.length > 1 ? 's' : ''}
                             </button>
                             {showJODropdown && (
                                 <div className="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                    {savedJOs.map(jo => (
-                                        <button key={jo.id} type="button" onClick={() => handleSelectJO(jo)}
-                                            className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${jobOrderIdInput === jo.id ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 dark:border-indigo-500' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300'}`}>
-                                            <p className="font-semibold text-slate-900 dark:text-white truncate">{jo.productName}</p>
-                                            <p className="font-mono text-slate-400 mt-0.5 truncate">{jo.id}</p>
-                                        </button>
-                                    ))}
+                                    {savedJOs.map(jo => {
+                                        const productName = products.find(p => p.id === jo.productId)?.name || jo.productId?.slice(-8);
+                                        return (
+                                            <button key={jo.id} type="button" onClick={() => handleSelectJO(jo)}
+                                                className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${jobOrderIdInput === jo.id ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 dark:border-indigo-500' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300'}`}>
+                                                <p className="font-semibold text-slate-900 dark:text-white truncate">{productName}</p>
+                                                <p className="font-mono text-slate-400 mt-0.5 truncate">{jo.id}</p>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

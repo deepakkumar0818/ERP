@@ -92,6 +92,8 @@ export const salesApi = {
 
 // ─── Production / Sales Orders ────────────────────────────────────────────────
 export const productionApi = {
+  getAll: () => request('/api/production/sales-orders'),
+
   createSalesOrder: (quotationId) =>
     request('/api/production/sales-orders', {
       method: 'POST',
@@ -123,6 +125,8 @@ export const inventoryApi = {
 
 // ─── Job Orders ───────────────────────────────────────────────────────────────
 export const jobOrderApi = {
+  getAll: () => request('/api/job-orders/getall'),
+
   create: (salesOrderId, productId, quantity) =>
     request('/api/job-orders/create-job-order', {
       method: 'POST',

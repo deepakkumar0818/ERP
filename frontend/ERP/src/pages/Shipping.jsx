@@ -1,8 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Truck, Plus, Search, Loader2, X, RefreshCw, Copy, ChevronDown } from 'lucide-react';
-import { shippingApi } from '../api/api';
+import { shippingApi, productionApi } from '../api/api';
 
-const SO_STORE_KEY = 'erp_sales_orders';
 
 const statusStyle = {
     IN_TRANSIT: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-100 dark:border-blue-500/20',
@@ -11,10 +10,6 @@ const statusStyle = {
 };
 
 const SHIP_STATUSES = ['IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
-
-function loadLocal(key) {
-    try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
-}
 
 export default function Shipping() {
     const [salesOrderIdInput, setSalesOrderIdInput] = useState('');
@@ -33,7 +28,21 @@ export default function Shipping() {
     const [formCarrier, setFormCarrier]           = useState('');
     const [formTrackingNo, setFormTrackingNo]     = useState('');
 
-    const [savedSOs] = useState(() => loadLocal(SO_STORE_KEY));
+    const [savedSOs, setSavedSOs] = useState([]);
+    const [sosLoading, setSosLoading] = useState(true);
+
+    useEffect(() => {
+        productionApi.getAll()
+            .then(d => {
+                const sos = (d.salesOrders || []).map(so => ({
+                    id: so.id,
+                    clientName: so.quotation?.lead?.clientName || 'Unknown',
+                }));
+                setSavedSOs(sos);
+            })
+            .catch(() => {})
+            .finally(() => setSosLoading(false));
+    }, []);
 
     const fetchShipments = useCallback(async (id) => {
         if (!id.trim()) return;
@@ -134,21 +143,13 @@ export default function Shipping() {
                     <form onSubmit={handleCreateShipment} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Sales Order selector */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Sales Order ID <span className="text-rose-500">*</span></label>
-                            {savedSOs.length > 0 ? (
-                                <div className="space-y-1">
-                                    <select value={formSalesOrderId} onChange={e => setFormSalesOrderId(e.target.value)} required className={inputCls}>
-                                        <option value="">— Select Sales Order —</option>
-                                        {savedSOs.map(so => (
-                                            <option key={so.id} value={so.id}>{so.clientName} — {so.id.slice(-8).toUpperCase()}</option>
-                                        ))}
-                                    </select>
-                                    <p className="text-[10px] text-slate-400 font-mono truncate">{formSalesOrderId || 'No SO selected'}</p>
-                                </div>
-                            ) : (
-                                <input type="text" value={formSalesOrderId} onChange={e => setFormSalesOrderId(e.target.value)} required
-                                    className={inputCls + ' font-mono'} placeholder="Paste Sales Order UUID" />
-                            )}
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Sales Order <span className="text-rose-500">*</span></label>
+                            <select value={formSalesOrderId} onChange={e => setFormSalesOrderId(e.target.value)} required className={inputCls}>
+                                <option value="">{sosLoading ? 'Loading…' : savedSOs.length === 0 ? 'No sales orders found' : '— Select Sales Order —'}</option>
+                                {savedSOs.map(so => (
+                                    <option key={so.id} value={so.id}>{so.clientName} — {so.id.slice(-8).toUpperCase()}</option>
+                                ))}
+                            </select>
                         </div>
                         {/* Carrier */}
                         <div>
@@ -189,7 +190,7 @@ export default function Shipping() {
                         </button>
                     </form>
 
-                    {/* Known Sales Orders dropdown */}
+                    {/* Sales Orders quick-pick */}
                     {savedSOs.length > 0 && (
                         <div>
                             <button type="button" onClick={() => setShowSODropdown(v => !v)}

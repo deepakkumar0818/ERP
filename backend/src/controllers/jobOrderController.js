@@ -93,9 +93,23 @@ const updateJobOrderStatus = async (req, res) => {
   }
 };
 
+// Get all job orders
+const getAllJobOrders = async (_req, res) => {
+  try {
+    const jobOrders = await prisma.jobOrder.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ jobOrders });
+  } catch (error) {
+    console.error('getAllJobOrders error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 module.exports = {
   createJobOrder,
   getJobOrdersBySalesOrder,
   getJobOrderById,
   updateJobOrderStatus,
+  getAllJobOrders,
 };
